@@ -19,6 +19,7 @@ var (
 			Background(lipgloss.Color("#25A065")).
 			Padding(0, 1)
 	itemStyle = lipgloss.NewStyle().PaddingLeft(4)
+	pageStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("#888888"))
 )
 
 type commitType struct {
@@ -30,12 +31,15 @@ func (c commitType) Description() string { return c.desc }
 func (c commitType) FilterValue() string { return c.title }
 
 type model struct {
-	stagedFiles  []string
-	commitTypes  list.Model
-	textInput    textinput.Model
-	selectedType string
-	state        int // 0: select type, 1: enter message, 2: confirm
-	err          error
+	stagedFiles    []string
+	allCommitTypes []list.Item
+	commitTypes    list.Model
+	textInput      textinput.Model
+	selectedType   string
+	state          int // 0: select type, 1: enter message, 2: confirm
+	err            error
+	currentPage    int
+	totalPages     int
 }
 
 func getGitStagedFiles() ([]string, error) {
@@ -64,24 +68,34 @@ func initialModel() (model, error) {
 		return model{}, err
 	}
 
-	commitTypes := []list.Item{
-		commitType{title: "feat", desc: "A new feature"},
-		commitType{title: "fix", desc: "A bug fix"},
-		commitType{title: "docs", desc: "Documentation only changes"},
-		commitType{title: "style", desc: "Changes that do not affect the meaning of the code"},
-		commitType{title: "refactor", desc: "A code change that neither fixes a bug nor adds a feature"},
-		commitType{title: "perf", desc: "A code change that improves performance"},
-		commitType{title: "test", desc: "Adding missing tests or correcting existing tests"},
-		commitType{title: "chore", desc: "Changes to the build process or auxiliary tools"},
+	allCommitTypes := []list.Item{
+		commitType{title: "📦feat", desc: "A new feature"},
+		commitType{title: "🔨fix", desc: "A bug fix"},
+		commitType{title: "📝docs", desc: "Documentation only changes"},
+		commitType{title: "🎨style", desc: "Changes that do not affect the meaning of the code"},
+		commitType{title: "🧹refactor", desc: "A code change that neither fixes a bug nor adds a feature"},
+		commitType{title: "🚀perf", desc: "A code change that improves performance"},
+		commitType{title: "🧪test", desc: "Adding missing tests or correcting existing tests"},
+		commitType{title: "👷chore", desc: "Changes to the build process or auxiliary tools"},
 	}
 
-	// Custom delegate for rendering list items
+	// Set up delegate for the list
 	delegate := list.NewDefaultDelegate()
+	delegate.ShowDescription = true
 	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(lipgloss.Color("170")).BorderForeground(lipgloss.Color("170"))
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.Foreground(lipgloss.Color("240"))
 
+	// Calculate total pages (4 items per page)
+	totalPages := (len(allCommitTypes) + 3) / 4
+
+	// Initial page is the first page
+	currentPage := 0
+
+	// Get the items for the first page
+	pageItems := getPageItems(allCommitTypes, currentPage, 4)
+
 	// Configure list with proper dimensions
-	l := list.New(commitTypes, delegate, 30, 10)
+	l := list.New(pageItems, delegate, 60, 20)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 	l.Styles.Title = titleStyle
@@ -94,11 +108,29 @@ func initialModel() (model, error) {
 	ti.Width = 60
 
 	return model{
-		stagedFiles: stagedFiles,
-		commitTypes: l,
-		textInput:   ti,
-		state:       0,
+		stagedFiles:    stagedFiles,
+		allCommitTypes: allCommitTypes,
+		commitTypes:    l,
+		textInput:      ti,
+		state:          0,
+		currentPage:    currentPage,
+		totalPages:     totalPages,
 	}, nil
+}
+
+// Helper function to get items for a specific page
+func getPageItems(allItems []list.Item, page, itemsPerPage int) []list.Item {
+	startIdx := page * itemsPerPage
+	endIdx := startIdx + itemsPerPage
+	if endIdx > len(allItems) {
+		endIdx = len(allItems)
+	}
+
+	if startIdx >= len(allItems) {
+		return []list.Item{}
+	}
+
+	return allItems[startIdx:endIdx]
 }
 
 func (m model) Init() tea.Cmd {
@@ -111,6 +143,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
+		case "tab":
+			if m.state == 0 {
+				// Switch to next page when tab is pressed
+				nextPage := (m.currentPage + 1) % m.totalPages
+				m.currentPage = nextPage
+				pageItems := getPageItems(m.allCommitTypes, m.currentPage, 4)
+				m.commitTypes.SetItems(pageItems)
+			}
+
 		case "enter":
 			switch m.state {
 			case 0: // select type
@@ -169,6 +211,11 @@ func (m model) View() string {
 	case 0:
 		// Select commit type
 		s += m.commitTypes.View()
+		s += "\n"
+
+		// Show page navigation info
+		s += pageStyle.Render(fmt.Sprintf("Page %d/%d (Press Tab to switch pages)", m.currentPage+1, m.totalPages))
+
 	case 1:
 		// Enter commit message
 		s += titleStyle.Render("Commit Message") + "\n"
