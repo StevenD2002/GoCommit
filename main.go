@@ -75,7 +75,16 @@ func initialModel() (model, error) {
 		commitType{title: "chore", desc: "Changes to the build process or auxiliary tools"},
 	}
 
-	l := list.New(commitTypes, list.NewDefaultDelegate(), 0, 0)
+	// Custom delegate for rendering list items
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(lipgloss.Color("170")).BorderForeground(lipgloss.Color("170"))
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.Foreground(lipgloss.Color("240"))
+
+	// Configure list with proper dimensions
+	l := list.New(commitTypes, delegate, 30, 10)
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	l.Styles.Title = titleStyle
 	l.Title = "Select commit type"
 
 	ti := textinput.New()
@@ -198,4 +207,3 @@ func main() {
 		fmt.Println("Commit successful!")
 	}
 }
-
