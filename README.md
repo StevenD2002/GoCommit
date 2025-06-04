@@ -1,5 +1,5 @@
 # GoCommit
-
+A simple tool to create uniform commits following atomic commits
 
 to easily use on your machine, run:
 
